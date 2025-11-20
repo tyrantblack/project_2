@@ -114,13 +114,38 @@ if menu == "EDA":
             sns.scatterplot(x=df[x], y=df[y], ax=ax)
             st.pyplot(fig)
 
-            st.write("### Correlation Heatmap")
-            fig, ax = plt.subplots(figsize=(9, 6))
-            sns.heatmap(df[num_cols].corr(), annot=True, cmap="coolwarm", ax=ax)
-            st.pyplot(fig)
-        else:
-            st.info("Not enough numeric columns for correlation.")
+            st.write("### Correlation Heatmap (Professional)")
 
+numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+
+if len(numeric_cols) >= 2:
+    try:
+        corr = df[numeric_cols].corr()
+
+        fig = plt.figure(figsize=(14, 10))
+
+        sns.heatmap(
+            corr,
+            annot=True,
+            fmt=".2f",
+            cmap="RdBu_r",
+            annot_kws={"size": 6},      # smaller text size
+            cbar_kws={"shrink": 0.8},   # smaller color bar
+            linewidths=0.3,
+            linecolor="white"
+        )
+
+        plt.xticks(rotation=45, ha='right', fontsize=8)
+        plt.yticks(fontsize=8)
+        plt.title("Correlation Matrix (Professional)", fontsize=16, pad=15)
+
+        st.pyplot(fig)
+
+    except Exception as e:
+        st.error(f"Skipping correlation heatmap due to error: {e}")
+
+else:
+    st.info("Not enough numeric columns for correlation.")
 
 # -------------------------------------------------
 # 3️⃣ CLUSTERING (FIXED FOR STREAMLIT CLOUD)
