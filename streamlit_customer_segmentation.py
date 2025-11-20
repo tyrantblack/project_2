@@ -3,30 +3,38 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
+
 import warnings
 warnings.filterwarnings("ignore")
-
-# Page config
-st.set_page_config(page_title="Customer Segmentation", layout="wide")
 sns.set(style="whitegrid")
 
-st.title("📊 Customer Segmentation Dashboard")
+# -------------------------------------------------
+# Page Configuration
+# -------------------------------------------------
+st.set_page_config(page_title="Customer Segmentation", layout="wide")
+st.title("📊 Customer Segmentation (K-Means) Dashboard")
 
-# Sidebar
+
+# -------------------------------------------------
+# Sidebar Menu
+# -------------------------------------------------
 menu = st.sidebar.radio(
     "Navigation",
     ["Upload Data", "EDA", "Clustering", "PCA Visualization", "Downloads"]
 )
 
-# -------------------------------
-# 1) UPLOAD DATA
-# -------------------------------
+
+# -------------------------------------------------
+# 1️⃣ UPLOAD DATA
+# -------------------------------------------------
 if menu == "Upload Data":
-    st.header("Upload Dataset")
+
+    st.header("📥 Upload Dataset")
     uploaded = st.file_uploader("Upload Excel or CSV", type=["xlsx", "csv"])
 
     if uploaded:
@@ -35,158 +43,207 @@ if menu == "Upload Data":
         else:
             df = pd.read_csv(uploaded)
 
+        # Store dataset in session
         st.session_state["df"] = df
-        st.success("Dataset Uploaded Successfully!")
 
+        st.success("Dataset uploaded successfully! 🎉")
         st.subheader("Preview")
         st.dataframe(df.head(), use_container_width=True)
 
-# -------------------------------
-# 2) EDA
-# -------------------------------
+        st.write(f"**Rows:** {df.shape[0]} | **Columns:** {df.shape[1]}")
+
+
+# -------------------------------------------------
+# 2️⃣ EDA SECTION
+# -------------------------------------------------
 if menu == "EDA":
 
     if "df" not in st.session_state:
-        st.warning("Upload data first")
+        st.warning("⚠ Please upload data first.")
         st.stop()
 
     df = st.session_state["df"]
 
     tab1, tab2, tab3 = st.tabs(["Overview", "Univariate", "Bivariate"])
 
-    # OVERVIEW TAB
+    # -------- OVERVIEW --------
     with tab1:
-        st.subheader("Basic Info")
-        st.write("Shape:", df.shape)
-        st.write(df.head())
+        st.subheader("📌 Data Overview")
+        st.dataframe(df.head(), use_container_width=True)
 
-        st.write("Missing Values")
-        st.write(df.isnull().sum())
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("### Missing Values")
+            st.write(df.isnull().sum())
 
-        st.write("Data Types")
+        with col2:
+            st.write("### Duplicate Rows")
+            st.write(df.duplicated().sum())
+
+        st.write("### Data Types")
         st.write(df.dtypes)
 
-    # UNIVARIATE TAB
+    # -------- UNIVARIATE --------
     with tab2:
+        st.subheader("📊 Univariate Analysis")
+
         num_cols = df.select_dtypes(include=np.number).columns.tolist()
+        if num_cols:
+            col = st.selectbox("Select numeric column", num_cols)
 
-        col = st.selectbox("Select numeric column", num_cols)
-        fig, ax = plt.subplots()
-        sns.histplot(df[col], kde=True, ax=ax)
-        st.pyplot(fig)
+            fig, ax = plt.subplots()
+            sns.histplot(df[col], kde=True, ax=ax)
+            st.pyplot(fig)
 
-        fig2, ax2 = plt.subplots()
-        sns.boxplot(x=df[col], ax=ax2)
-        st.pyplot(fig2)
+            fig2, ax2 = plt.subplots()
+            sns.boxplot(x=df[col], ax=ax2)
+            st.pyplot(fig2)
+        else:
+            st.info("No numeric columns found.")
 
-    # BIVARIATE TAB
+    # -------- BIVARIATE --------
     with tab3:
-        num_cols = df.select_dtypes(include=np.number).columns.tolist()
+        st.subheader("🔗 Bivariate Analysis")
 
+        num_cols = df.select_dtypes(include=np.number).columns.tolist()
         if len(num_cols) >= 2:
             x = st.selectbox("X-axis", num_cols)
             y = st.selectbox("Y-axis", num_cols)
 
-            fig3, ax3 = plt.subplots()
-            sns.scatterplot(x=df[x], y=df[y], ax=ax3)
-            st.pyplot(fig3)
+            fig, ax = plt.subplots()
+            sns.scatterplot(x=df[x], y=df[y], ax=ax)
+            st.pyplot(fig)
 
-            fig4, ax4 = plt.subplots(figsize=(9,6))
-            sns.heatmap(df[num_cols].corr(), annot=True, cmap="coolwarm", ax=ax4)
-            st.pyplot(fig4)
+            st.write("### Correlation Heatmap")
+            fig, ax = plt.subplots(figsize=(9, 6))
+            sns.heatmap(df[num_cols].corr(), annot=True, cmap="coolwarm", ax=ax)
+            st.pyplot(fig)
+        else:
+            st.info("Not enough numeric columns for correlation.")
 
-# -------------------------------
-# 3) CLUSTERING
-# -------------------------------
+
+# -------------------------------------------------
+# 3️⃣ CLUSTERING (FIXED FOR STREAMLIT CLOUD)
+# -------------------------------------------------
 if menu == "Clustering":
 
     if "df" not in st.session_state:
-        st.warning("Upload data first")
+        st.warning("⚠ Please upload data first.")
         st.stop()
 
-    df = st.session_state["df"]
+    df = st.session_state["df"].copy()
 
-    st.header("Run K-Means Clustering")
+    st.header("🧮 K-Means Clustering")
 
+    # Convert mixed-type columns safely
+    df = df.apply(pd.to_numeric, errors="ignore")
+
+    # Select only numeric columns
     num_cols = df.select_dtypes(include=np.number).columns.tolist()
-    features = st.multiselect("Select features", num_cols, default=num_cols)
 
-    if st.button("Cluster"):
+    if len(num_cols) < 2:
+        st.error("Not enough numeric columns for clustering.")
+        st.stop()
 
-        X = df[features]
+    features = st.multiselect("Select features for clustering:", num_cols, default=num_cols)
+
+    # Handle missing values BEFORE clustering
+    df[features] = df[features].fillna(df[features].median())
+
+    if st.button("Run Clustering"):
+
+        # Scaling
         scaler = StandardScaler()
+        X = df[features]
         X_scaled = scaler.fit_transform(X)
 
-        # Compute optimal K
-        sse, sil = [], []
+        # Elbow + Silhouette
         K_range = range(2, 11)
+        sse, sil = [], []
 
         for k in K_range:
-            km = KMeans(n_clusters=k, random_state=42)
-            labels = km.fit_predict(X_scaled)
-            sse.append(km.inertia_)
-            sil.append(silhouette_score(X_scaled, labels))
+            try:
+                km = KMeans(n_clusters=k, random_state=42)
+                labels = km.fit_predict(X_scaled)
+                sse.append(km.inertia_)
+                sil.append(silhouette_score(X_scaled, labels))
+            except:
+                sse.append(None)
+                sil.append(None)
 
-        # Elbow
-        st.subheader("Elbow Method")
+        st.subheader("📉 Elbow Method")
         fig, ax = plt.subplots()
-        ax.plot(list(K_range), sse, marker='o')
+        ax.plot(list(K_range), sse, marker="o")
         st.pyplot(fig)
 
-        # Silhouette
-        st.subheader("Silhouette Scores")
+        st.subheader("📈 Silhouette Scores")
         fig2, ax2 = plt.subplots()
-        ax2.plot(list(K_range), sil, marker='o')
+        ax2.plot(list(K_range), sil, marker="o")
         st.pyplot(fig2)
 
+        # Determine best K
         best_k = int(K_range[np.argmax(sil)])
-        st.success(f"Optimal K = {best_k}")
+        st.success(f"Optimal number of clusters = **{best_k}**")
 
-        kmeans = KMeans(n_clusters=best_k, random_state=42)
-        df["cluster"] = kmeans.fit_predict(X_scaled)
+        # Final model
+        km = KMeans(n_clusters=best_k, random_state=42)
+        df["cluster"] = km.fit_predict(X_scaled)
 
+        # Save results in session
         st.session_state["clustered_df"] = df
         st.session_state["X_scaled"] = X_scaled
 
-        st.subheader("Cluster Counts")
+        st.subheader("📊 Cluster Counts")
         st.write(df["cluster"].value_counts())
 
-        st.dataframe(df.head())
+        st.dataframe(df.head(), use_container_width=True)
 
-# -------------------------------
-# 4) PCA VISUALIZATION
-# -------------------------------
+
+# -------------------------------------------------
+# 4️⃣ PCA VISUALIZATION
+# -------------------------------------------------
 if menu == "PCA Visualization":
 
     if "clustered_df" not in st.session_state:
-        st.warning("Run clustering first")
+        st.warning("⚠ Please run clustering first.")
         st.stop()
 
     df = st.session_state["clustered_df"]
     X_scaled = st.session_state["X_scaled"]
 
-    st.header("PCA 2D Cluster Visualization")
+    st.header("🎨 PCA Visualization (2D)")
 
     pca = PCA(n_components=2)
     comps = pca.fit_transform(X_scaled)
 
-    pca_df = pd.DataFrame(comps, columns=["PC1","PC2"])
+    pca_df = pd.DataFrame(comps, columns=["PC1", "PC2"])
     pca_df["cluster"] = df["cluster"]
 
-    fig, ax = plt.subplots(figsize=(9,6))
-    sns.scatterplot(data=pca_df, x="PC1", y="PC2", hue="cluster", palette="tab10")
+    fig, ax = plt.subplots(figsize=(9, 6))
+    sns.scatterplot(data=pca_df, x="PC1", y="PC2", hue="cluster", palette="tab10", s=100)
     st.pyplot(fig)
 
-# -------------------------------
-# 5) DOWNLOAD OUTPUTS
-# -------------------------------
+
+# -------------------------------------------------
+# 5️⃣ DOWNLOAD OUTPUTS
+# -------------------------------------------------
 if menu == "Downloads":
 
     if "clustered_df" not in st.session_state:
-        st.warning("Run clustering first")
+        st.warning("⚠ Please run clustering first.")
         st.stop()
 
     df = st.session_state["clustered_df"]
+
+    st.header("📥 Download Outputs")
+
     csv = df.to_csv(index=False).encode("utf-8")
 
-    st.download_button("Download Clustered Dataset", csv, "customer_clusters.csv", "text/csv")
+    st.download_button(
+        "Download Clustered Dataset (CSV)",
+        csv,
+        "customer_clusters.csv",
+        "text/csv"
+    )
+
+    st.success("CSV ready for download! 🎯")
