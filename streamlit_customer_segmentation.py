@@ -43,7 +43,6 @@ if menu == "Upload Data":
         else:
             df = pd.read_csv(uploaded)
 
-        # Store dataset in session
         st.session_state["df"] = df
 
         st.success("Dataset uploaded successfully! 🎉")
@@ -66,7 +65,7 @@ if menu == "EDA":
 
     tab1, tab2, tab3 = st.tabs(["Overview", "Univariate", "Bivariate"])
 
-    # -------- OVERVIEW --------
+    # -------- 2.1 Overview --------
     with tab1:
         st.subheader("📌 Data Overview")
         st.dataframe(df.head(), use_container_width=True)
@@ -83,7 +82,7 @@ if menu == "EDA":
         st.write("### Data Types")
         st.write(df.dtypes)
 
-    # -------- UNIVARIATE --------
+    # -------- 2.2 Univariate --------
     with tab2:
         st.subheader("📊 Univariate Analysis")
 
@@ -101,12 +100,14 @@ if menu == "EDA":
         else:
             st.info("No numeric columns found.")
 
-    # -------- BIVARIATE --------
+    # -------- 2.3 Bivariate --------
     with tab3:
         st.subheader("🔗 Bivariate Analysis")
 
         num_cols = df.select_dtypes(include=np.number).columns.tolist()
+
         if len(num_cols) >= 2:
+
             x = st.selectbox("X-axis", num_cols)
             y = st.selectbox("Y-axis", num_cols)
 
@@ -114,41 +115,40 @@ if menu == "EDA":
             sns.scatterplot(x=df[x], y=df[y], ax=ax)
             st.pyplot(fig)
 
+            # ------- PROFESSIONAL CORRELATION HEATMAP -------
             st.write("### Correlation Heatmap (Professional)")
 
-numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+            try:
+                corr = df[num_cols].corr()
 
-if len(numeric_cols) >= 2:
-    try:
-        corr = df[numeric_cols].corr()
+                fig = plt.figure(figsize=(14, 10))
 
-        fig = plt.figure(figsize=(14, 10))
+                sns.heatmap(
+                    corr,
+                    annot=True,
+                    fmt=".2f",
+                    cmap="RdBu_r",
+                    annot_kws={"size": 6},
+                    cbar_kws={"shrink": 0.8},
+                    linewidths=0.3,
+                    linecolor="white"
+                )
 
-        sns.heatmap(
-            corr,
-            annot=True,
-            fmt=".2f",
-            cmap="RdBu_r",
-            annot_kws={"size": 6},      # smaller text size
-            cbar_kws={"shrink": 0.8},   # smaller color bar
-            linewidths=0.3,
-            linecolor="white"
-        )
+                plt.xticks(rotation=45, ha='right', fontsize=8)
+                plt.yticks(fontsize=8)
+                plt.title("Correlation Matrix (Professional)", fontsize=16, pad=15)
 
-        plt.xticks(rotation=45, ha='right', fontsize=8)
-        plt.yticks(fontsize=8)
-        plt.title("Correlation Matrix (Professional)", fontsize=16, pad=15)
+                st.pyplot(fig)
 
-        st.pyplot(fig)
+            except Exception as e:
+                st.error(f"Error generating heatmap: {e}")
 
-    except Exception as e:
-        st.error(f"Skipping correlation heatmap due to error: {e}")
+        else:
+            st.info("Not enough numeric columns for correlation.")
 
-else:
-    st.info("Not enough numeric columns for correlation.")
 
 # -------------------------------------------------
-# 3️⃣ CLUSTERING (FIXED FOR STREAMLIT CLOUD)
+# 3️⃣ CLUSTERING (STREAMLIT CLOUD SAFE)
 # -------------------------------------------------
 if menu == "Clustering":
 
@@ -160,10 +160,7 @@ if menu == "Clustering":
 
     st.header("🧮 K-Means Clustering")
 
-    # Convert mixed-type columns safely
     df = df.apply(pd.to_numeric, errors="ignore")
-
-    # Select only numeric columns
     num_cols = df.select_dtypes(include=np.number).columns.tolist()
 
     if len(num_cols) < 2:
@@ -172,17 +169,14 @@ if menu == "Clustering":
 
     features = st.multiselect("Select features for clustering:", num_cols, default=num_cols)
 
-    # Handle missing values BEFORE clustering
     df[features] = df[features].fillna(df[features].median())
 
     if st.button("Run Clustering"):
 
-        # Scaling
         scaler = StandardScaler()
         X = df[features]
         X_scaled = scaler.fit_transform(X)
 
-        # Elbow + Silhouette
         K_range = range(2, 11)
         sse, sil = [], []
 
@@ -206,15 +200,12 @@ if menu == "Clustering":
         ax2.plot(list(K_range), sil, marker="o")
         st.pyplot(fig2)
 
-        # Determine best K
         best_k = int(K_range[np.argmax(sil)])
         st.success(f"Optimal number of clusters = **{best_k}**")
 
-        # Final model
         km = KMeans(n_clusters=best_k, random_state=42)
         df["cluster"] = km.fit_predict(X_scaled)
 
-        # Save results in session
         st.session_state["clustered_df"] = df
         st.session_state["X_scaled"] = X_scaled
 
